@@ -1,0 +1,13 @@
+{
+  "name": "telegram-file-bot",
+  "version": "1.0.0",
+  "description": "Telegram File Bot & Mini App Server",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0",
+    "express": "^4.19.2"
+  }
+}
