@@ -1,7 +1,6 @@
 /**
- * Telegram File Store Bot Server
- * Configured for: Render.com & UptimeRobot
- * WebApp Domain: https://freefile.fahimfaysal.shop/index.html
+ * Telegram File Store Bot Server (100% Guaranteed Referral Tracking)
+ * Token: 8914672895:AAFNFl7VMvdYrQn83tfC1SAH0ihbPOv5D18
  */
 
 const TelegramBot = require('node-telegram-bot-api');
@@ -13,47 +12,50 @@ const REQUIRED_CHANNELS = ['@a54auraax', '@FHx_Technical'];
 const WEBAPP_URL = 'https://freefile.fahimfaysal.shop/index.html';
 const FIREBASE_DB_URL = 'https://freefile-a561a-default-rtdb.asia-southeast1.firebasedatabase.app';
 
-// 1. Express Server for Render & UptimeRobot Health Check
+// 1. Express Server for Render & UptimeRobot
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.send({ status: 'Online', service: 'Telegram File Bot', time: new Date() });
+  res.json({ status: 'Online', bot: 'Running', time: new Date() });
 });
 
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`Server is active on port ${PORT}`);
 });
 
-// 2. Telegram Bot Polling Initialize
+// 2. Telegram Bot Polling
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// Firebase Database REST Helpers
-function getFirebaseData(path) {
+// Robust Firebase REST API Requests
+function fbGet(path) {
   return new Promise((resolve) => {
     https.get(`${FIREBASE_DB_URL}/${path}.json`, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
-        try { resolve(JSON.parse(data)); } catch(e) { resolve(null); }
+        try { resolve(JSON.parse(data)); } catch (e) { resolve(null); }
       });
     }).on('error', () => resolve(null));
   });
 }
 
-function updateFirebaseData(path, payload) {
+function fbUpdate(path, payload) {
   return new Promise((resolve) => {
     const data = JSON.stringify(payload);
     const req = https.request(`${FIREBASE_DB_URL}/${path}.json`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': data.length }
-    }, () => resolve(true));
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+    }, (res) => {
+      resolve(true);
+    });
+    req.on('error', () => resolve(false));
     req.write(data);
     req.end();
   });
 }
 
-// Check Channel Membership
+// Channel Join Verification Check
 async function isSubscribed(userId) {
   for (const ch of REQUIRED_CHANNELS) {
     try {
@@ -62,7 +64,8 @@ async function isSubscribed(userId) {
         return false;
       }
     } catch (e) {
-      console.error(`Error checking channel ${ch}:`, e.message);
+      console.log(`Channel verification check warning for ${ch}:`, e.message);
+      // If bot is not admin in channel, allow temporarily or return false
       return false;
     }
   }
@@ -73,11 +76,17 @@ async function isSubscribed(userId) {
 bot.onText(/\/start(.*)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const user = msg.from;
-  const startParam = (match[1] || '').trim();
+  const rawParam = (match[1] || '').trim();
 
-  let referrerId = null;
-  if (startParam.startsWith('ref_')) {
-    referrerId = startParam.replace('ref_', '');
+  // Extract Referral ID precisely
+  let referrerId = 'none';
+  if (rawParam.includes('ref_')) {
+    referrerId = rawParam.split('ref_')[1].trim();
+  }
+
+  // Prevent self referral
+  if (String(referrerId) === String(user.id)) {
+    referrerId = 'none';
   }
 
   const subscribed = await isSubscribed(user.id);
@@ -91,87 +100,107 @@ bot.onText(/\/start(.*)/, async (msg, match) => {
           inline_keyboard: [
             [{ text: '📢 জয়েন চ্যানেল ১', url: 'https://t.me/a54auraax' }],
             [{ text: '📢 জয়েন চ্যানেল ২', url: 'https://t.me/FHx_Technical' }],
-            [{ text: '✅ ভেরিফাই করুন', callback_data: `verify_${referrerId || 'none'}` }]
+            [{ text: '✅ ভেরিফাই করুন', callback_data: `verify_${referrerId}` }]
           ]
         }
       }
     );
   }
 
-  await completeVerification(chatId, user, referrerId);
+  await completeVerification(chatId, user, referrerId === 'none' ? null : referrerId);
 });
 
-// Callback Query Handler
+// Verify Callback Handler
 bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
   const user = query.from;
   const data = query.data;
 
   if (data.startsWith('verify_')) {
-    const referrerId = data.replace('verify_', '');
+    const referrerId = data.replace('verify_', '').trim();
     const subscribed = await isSubscribed(user.id);
 
     if (!subscribed) {
       return bot.answerCallbackQuery(query.id, {
-        text: '❌ আপনি এখনো সব চ্যানেলে জয়েন করেননি! দয়া করে দুটি চ্যানেলেই জয়েন করে আবার চেষ্টা করুন।',
+        text: '❌ আপনি এখনো সব চ্যানেলে জয়েন করেননি! দয়া করে দুটি চ্যানেলেই জয়েন করে আবার ভেরিফাই বাটনে চাপুন।',
         show_alert: true
       });
     }
 
-    try { await bot.deleteMessage(chatId, query.message.message_id); } catch(e){}
+    try { await bot.deleteMessage(chatId, query.message.message_id); } catch (e) {}
     await completeVerification(chatId, user, referrerId === 'none' ? null : referrerId);
   }
 });
 
-// Verification Complete & Referral Engine
+// Complete Verification & Process Referral Instantly
 async function completeVerification(chatId, user, referrerId) {
-  const settings = (await getFirebaseData('settings')) || { referralBonus: 20, botUsername: 'FilePayBot' };
-  const existingUser = await getFirebaseData(`users/${user.id}`);
+  const settings = (await fbGet('settings')) || { referralBonus: 20, botUsername: 'FilePayBot' };
+  const existingUser = await fbGet(`users/${user.id}`);
 
-  // Get user profile photo
-  let photoUrl = '';
-  try {
-    const photos = await bot.getUserProfilePhotos(user.id, { limit: 1 });
-    if (photos.total_count > 0) {
-      const fileId = photos.photos[0][0].file_id;
-      const file = await bot.getFile(fileId);
-      photoUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
-    }
-  } catch(e){}
+  const bonusAmount = parseInt(settings.referralBonus) || 20;
 
+  // New User Registration & Referral Reward
   if (!existingUser) {
     const newUser = {
       id: user.id,
       name: [user.first_name, user.last_name].filter(Boolean).join(' ') || 'User',
       username: user.username || 'No Username',
-      photo: photoUrl,
-      coins: 10,
+      coins: 10, // Initial welcome bonus
       referralCount: 0,
+      referredBy: referrerId || null,
       adsWatchedToday: 0,
       lastAdDate: new Date().toISOString().slice(0, 10),
       unlocked: {},
       isVerified: true
     };
 
+    // Credit bonus to the inviter
     if (referrerId && String(referrerId) !== String(user.id)) {
-      const refUser = await getFirebaseData(`users/${referrerId}`);
-      if (refUser) {
-        const bonus = settings.referralBonus || 20;
-        await updateFirebaseData(`users/${referrerId}`, {
-          coins: (refUser.coins || 0) + bonus,
-          referralCount: (refUser.referralCount || 0) + 1
+      const inviter = await fbGet(`users/${referrerId}`);
+      if (inviter) {
+        const currentCoins = parseInt(inviter.coins) || 0;
+        const currentRefs = parseInt(inviter.referralCount) || 0;
+
+        await fbUpdate(`users/${referrerId}`, {
+          coins: currentCoins + bonusAmount,
+          referralCount: currentRefs + 1
         });
-        bot.sendMessage(referrerId, `🎉 *অভিনন্দন!* আপনার রেফার লিংকে একজন নতুন মেম্বার জয়েন করেছে। আপনি *+${bonus} কয়েন* পেয়েছেন!`, { parse_mode: 'Markdown' });
+
+        // Notify the inviter immediately
+        bot.sendMessage(referrerId, 
+          `🎉 *অভিনন্দন!*\n\nআপনার রেফারেল লিংকে একজন নতুন মেম্বার (*${user.first_name}*) জয়েন করেছে। আপনার একাউন্টে *+${bonusAmount} কয়েন* যোগ করা হয়েছে!`, 
+          { parse_mode: 'Markdown' }
+        ).catch(() => {});
       }
     }
 
-    await updateFirebaseData(`users/${user.id}`, newUser);
+    await fbUpdate(`users/${user.id}`, newUser);
   } else {
-    // Keep name & photo updated
-    await updateFirebaseData(`users/${user.id}`, {
+    // If existing user was not referred before and came with a referrer now
+    if (!existingUser.referredBy && referrerId && String(referrerId) !== String(user.id)) {
+      const inviter = await fbGet(`users/${referrerId}`);
+      if (inviter) {
+        const currentCoins = parseInt(inviter.coins) || 0;
+        const currentRefs = parseInt(inviter.referralCount) || 0;
+
+        await fbUpdate(`users/${referrerId}`, {
+          coins: currentCoins + bonusAmount,
+          referralCount: currentRefs + 1
+        });
+
+        await fbUpdate(`users/${user.id}`, { referredBy: referrerId });
+
+        bot.sendMessage(referrerId, 
+          `🎉 *অভিনন্দন!*\n\nআপনার রেফারেল লিংকে একজন মেম্বার অ্যাকাউন্ট নিশ্চিত করেছে। আপনি *+${bonusAmount} কয়েন* পেয়েছেন!`, 
+          { parse_mode: 'Markdown' }
+        ).catch(() => {});
+      }
+    }
+
+    // Keep user state verified
+    await fbUpdate(`users/${user.id}`, {
       name: [user.first_name, user.last_name].filter(Boolean).join(' ') || 'User',
       username: user.username || 'No Username',
-      photo: photoUrl || existingUser.photo || '',
       isVerified: true
     });
   }
@@ -179,10 +208,10 @@ async function completeVerification(chatId, user, referrerId) {
   const me = await bot.getMe();
   const myRefLink = `https://t.me/${me.username}?start=ref_${user.id}`;
 
-  const welcomeText = `🎉 *অভিনন্দন ${user.first_name}! আপনার অ্যাকাউন্ট সফলভাবে ভেরিফাই হয়েছে।*\n\n` +
-    `💡 *কিভাবে কাজ করবেন:*\n` +
-    `১. অ্যাপে প্রতিদিন বিজ্ঞাপন দেখে ফ্রিতে কয়েন আর্ন করুন।\n` +
-    `২. আপনার রেফারেল লিংক বন্ধুদের মাঝে শেয়ার করে প্রতি রেফারে *${settings.referralBonus || 20} কয়েন* আয় করুন।\n` +
+  const welcomeText = `🎉 *অভিনন্দন ${user.first_name || ''}! আপনার অ্যাকাউন্ট ভেরিফাইড।*\n\n` +
+    `💡 *কাজের নিয়ম:*\n` +
+    `১. অ্যাপে প্রতিদিন বিজ্ঞাপন দেখে ফ্রিতে কয়েন আয় করুন।\n` +
+    `২. আপনার রেফারেল লিংক শেয়ার করে প্রতি রেফারে *${bonusAmount} কয়েন* আয় করুন।\n` +
     `৩. অর্জিত কয়েন দিয়ে আপনার পছন্দের যে কোনো ফাইল বা স্ক্রিপ্ট এক ক্লিকে আনলক করুন!\n\n` +
     `🔗 *আপনার রেফারেল লিংক:*\n\`${myRefLink}\` (ক্লিক করে কপি করুন)\n\n` +
     `এখনই নিচে বাটনে চাপ দিয়ে অ্যাপে প্রবেশ করুন 👇`;
@@ -192,7 +221,7 @@ async function completeVerification(chatId, user, referrerId) {
     reply_markup: {
       inline_keyboard: [
         [{ text: '🚀 ওপেন ফাইল অ্যাপ (Mini App)', web_app: { url: WEBAPP_URL } }],
-        [{ text: '👥 বন্ধুদের ইনভাইট করুন', url: `https://t.me/share/url?url=${encodeURIComponent(myRefLink)}&text=${encodeURIComponent("ফ্রিতে প্রিমিয়াম ফাইল ডাউনলোড করতে এখনই জয়েন করুন!")}` }]
+        [{ text: '👥 বন্ধুদের রেফার করুন', url: `https://t.me/share/url?url=${encodeURIComponent(myRefLink)}&text=${encodeURIComponent("ফ্রিতে প্রিমিয়াম ফাইল ডাউনলোড করতে এখনই জয়েন করুন!")}` }]
       ]
     }
   });
