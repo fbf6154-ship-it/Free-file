@@ -1,31 +1,32 @@
 /**
- * Telegram File Store Bot (100% Fixed for New Users & Deep Links)
- * Bot Token: 8914672895:AAFNFl7VMvdYrQn83tfC1SAH0ihbPOv5D18
- * Bot Username: frxfreebot
+ * Telegram File Store Bot Server
+ * Bot Token: 8914672895:AAEAKLnsTMhfwjTUeRXGNOo_JDcARdXOtk0
+ * Channels: @a54auraax & @FHx_Technical
+ * Domain: https://freefile.fahimfaysal.shop/index.html
  */
 
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const https = require('https');
 
-const BOT_TOKEN = '8914672895:AAFNFl7VMvdYrQn83tfC1SAH0ihbPOv5D18';
+const BOT_TOKEN = '8914672895:AAEAKLnsTMhfwjTUeRXGNOo_JDcARdXOtk0';
 const REQUIRED_CHANNELS = ['@a54auraax', '@FHx_Technical'];
 const WEBAPP_URL = 'https://freefile.fahimfaysal.shop/index.html';
 const FIREBASE_DB_URL = 'https://freefile-a561a-default-rtdb.asia-southeast1.firebasedatabase.app';
 
-// 1. Express Server for Render Free Tier & UptimeRobot
+// 1. Keep-Alive Server for Render Free Tier & UptimeRobot
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.send({ status: 'Online', bot: 'frxfreebot', time: new Date() });
+  res.json({ status: 'Online', bot: 'Running', timestamp: new Date() });
 });
 
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`Express server running on port ${PORT}`);
 });
 
-// 2. Telegram Bot Instance with Polling
+// 2. Telegram Bot Polling Instance
 const bot = new TelegramBot(BOT_TOKEN, { 
   polling: {
     interval: 300,
@@ -34,7 +35,7 @@ const bot = new TelegramBot(BOT_TOKEN, {
   }
 });
 
-// Firebase REST API Helpers
+// Firebase Database REST Helpers
 function fbGet(path) {
   return new Promise((resolve) => {
     https.get(`${FIREBASE_DB_URL}/${path}.json`, (res) => {
@@ -60,7 +61,7 @@ function fbUpdate(path, payload) {
   });
 }
 
-// Safe Channel Subscription Check
+// Check Channel Subscription
 async function isSubscribed(userId) {
   for (const ch of REQUIRED_CHANNELS) {
     try {
@@ -69,26 +70,24 @@ async function isSubscribed(userId) {
         return false;
       }
     } catch (e) {
-      console.log(`Channel check error for ${ch}:`, e.message);
-      // যদি বট চ্যানেলে অ্যাডমিন না থাকে তবে ক্র্যাশ না করে সত্য ধরে নিবে
+      console.log(`Channel Check Note for ${ch}:`, e.message);
       return false; 
     }
   }
   return true;
 }
 
-// Global Message Listener (Catches both regular text and raw /start clicks)
+// Global Message Handler (Catches /start clicks immediately)
 bot.on('message', async (msg) => {
   if (!msg.text) return;
   const text = msg.text.trim();
   const chatId = msg.chat.id;
   const user = msg.from;
 
-  // Handle /start (With or without ref parameter)
   if (text.startsWith('/start')) {
     let referrerId = 'none';
 
-    // Parse ref parameter: Handles both `/start ref_123` and `/start`
+    // Parse referral ID
     const parts = text.split(' ');
     if (parts.length > 1) {
       const param = parts[1].trim();
@@ -97,7 +96,7 @@ bot.on('message', async (msg) => {
       }
     }
 
-    // Prevent self referral
+    // Prevent Self-Referral
     if (String(referrerId) === String(user.id)) {
       referrerId = 'none';
     }
@@ -107,7 +106,8 @@ bot.on('message', async (msg) => {
 
       if (!subscribed) {
         return bot.sendMessage(chatId, 
-          `👋 হ্যালো ${user.first_name || 'ইউজার'}!\n\nআমাদের বট ব্যবহার করতে এবং ফাইল আনলক করতে নিচের চ্যানেল দুটিতে জয়েন করুন:\n\n1️⃣ Channel 1: https://t.me/a54auraax\n2️⃣ Channel 2: https://t.me/FHx_Technical\n\nজয়েন করার পর নিচে 'ভেরিফাই করুন' বাটনে চাপ দিন।`, {
+          `👋 *হ্যালো ${user.first_name || 'ইউজার'}!*\n\nআমাদের বট ব্যবহার করতে এবং ফাইল আনলক করতে নিচের চ্যানেল দুটিতে জয়েন করুন:\n\n1️⃣ [Channel 1 - Join Here](https://t.me/a54auraax)\n2️⃣ [Channel 2 - Join Here](https://t.me/FHx_Technical)\n\nজয়েন করার পর নিচে *✅ ভেরিফাই করুন* বাটনে চাপ দিন।`, {
+            parse_mode: 'Markdown',
             disable_web_page_preview: true,
             reply_markup: {
               inline_keyboard: [
@@ -122,12 +122,12 @@ bot.on('message', async (msg) => {
 
       await completeVerification(chatId, user, referrerId === 'none' ? null : referrerId);
     } catch (err) {
-      console.error('Error handling start:', err);
+      console.error('Error on /start:', err);
     }
   }
 });
 
-// Verify Callback Handler (When user clicks ✅ ভেরিফাই করুন)
+// Callback Query Handler for Verify Button
 bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
   const user = query.from;
@@ -141,7 +141,7 @@ bot.on('callback_query', async (query) => {
 
       if (!subscribed) {
         return bot.answerCallbackQuery(query.id, {
-          text: '❌ আপনি এখনো সব চ্যানেলে জয়েন করেননি! দয়া করে দুটি চ্যানেলেই জয়েন করে আবার চাপ দিন।',
+          text: '❌ আপনি এখনো সব চ্যানেলে জয়েন করেননি! দুটি চ্যানেলেই জয়েন করে আবার ভেরিফাই করুন।',
           show_alert: true
         });
       }
@@ -154,17 +154,28 @@ bot.on('callback_query', async (query) => {
   }
 });
 
-// Complete User Verification & Add +1 Point
+// Complete Verification & Referral Logic (+1 Point)
 async function completeVerification(chatId, user, referrerId) {
   try {
     const existingUser = await fbGet(`users/${user.id}`);
 
+    // Fetch Telegram Avatar Photo
+    let photoUrl = '';
+    try {
+      const photos = await bot.getUserProfilePhotos(user.id, { limit: 1 });
+      if (photos.total_count > 0) {
+        const fileId = photos.photos[0][0].file_id;
+        const file = await bot.getFile(fileId);
+        photoUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+      }
+    } catch(e){}
+
     if (!existingUser) {
-      // New User
       const newUser = {
         id: user.id,
         name: [user.first_name, user.last_name].filter(Boolean).join(' ') || 'User',
         username: user.username || 'No Username',
+        photo: photoUrl,
         coins: 0,
         referralCount: 0,
         referredBy: referrerId || null,
@@ -174,7 +185,7 @@ async function completeVerification(chatId, user, referrerId) {
         isVerified: true
       };
 
-      // Add 1 Point to the Inviter
+      // Add 1 Point to Inviter
       if (referrerId && String(referrerId) !== String(user.id)) {
         const inviter = await fbGet(`users/${referrerId}`);
         if (inviter) {
@@ -187,7 +198,8 @@ async function completeVerification(chatId, user, referrerId) {
           });
 
           bot.sendMessage(referrerId, 
-            `🎉 অভিনন্দন! আপনার রেফারেল লিংকে একজন নতুন মেম্বার (${user.first_name}) জয়েন করেছে। আপনার অ্যাকাউন্টে +1 পয়েন্ট যোগ হয়েছে!`
+            `🎉 *অভিনন্দন!*\n\nআপনার রেফারেল লিংকে একজন নতুন মেম্বার (*${user.first_name}*) জয়েন করেছে। আপনার অ্যাকাউন্টে *+1 পয়েন্ট* যোগ করা হয়েছে!`, 
+            { parse_mode: 'Markdown' }
           ).catch(() => {});
         }
       }
@@ -198,25 +210,28 @@ async function completeVerification(chatId, user, referrerId) {
       await fbUpdate(`users/${user.id}`, {
         name: [user.first_name, user.last_name].filter(Boolean).join(' ') || 'User',
         username: user.username || 'No Username',
+        photo: photoUrl || existingUser.photo || '',
         isVerified: true
       });
     }
 
-    const myRefLink = `https://t.me/frxfreebot?start=ref_${user.id}`;
+    const me = await bot.getMe();
+    const myRefLink = `https://t.me/${me.username}?start=ref_${user.id}`;
 
-    const welcomeText = `🎉 অভিনন্দন ${user.first_name || ''}! আপনার অ্যাকাউন্ট ভেরিফাইড হয়েছে।\n\n` +
-      `💡 পয়েন্ট আয় করার নিয়ম:\n` +
-      `১. অ্যাপে ১টি বিজ্ঞাপন দেখলে পাবেন = ১ পয়েন্ট।\n` +
-      `২. আপনার রেফারেল লিংক শেয়ার করে প্রতি রেফারে পাবেন = ১ পয়েন্ট।\n` +
-      `৩. অর্জিত পয়েন্ট দিয়ে ফাইল ডাউনলোড করুন!\n\n` +
-      `🔗 আপনার রেফারেল লিংক:\n${myRefLink}\n\n` +
+    const welcomeText = `🎉 *অভিনন্দন ${user.first_name || ''}! আপনার অ্যাকাউন্ট ভেরিফাইড হয়েছে।*\n\n` +
+      `💡 *পয়েন্ট আয় করার নিয়ম:*\n` +
+      `১. অ্যাপে ১টি বিজ্ঞাপন দেখলে পাবেন = *১ পয়েন্ট*।\n` +
+      `২. আপনার রেফারেল লিংক বন্ধুদের শেয়ার করে প্রতি রেফারে পাবেন = *১ পয়েন্ট*।\n` +
+      `৩. অর্জিত পয়েন্ট দিয়ে আপনার পছন্দের যে কোনো ফাইল এক ক্লিকে ডাউনলোড করুন!\n\n` +
+      `🔗 *আপনার রেফারেল লিংক:*\n\`${myRefLink}\` (ক্লিক করে কপি করুন)\n\n` +
       `নিচের বাটনে চাপ দিয়ে অ্যাপ ওপেন করুন 👇`;
 
     bot.sendMessage(chatId, welcomeText, {
+      parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
           [{ text: '🚀 ওপেন ফাইল অ্যাপ (Mini App)', web_app: { url: WEBAPP_URL } }],
-          [{ text: '👥 বন্ধুদের রেফার করুন', url: `https://t.me/share/url?url=${encodeURIComponent(myRefLink)}&text=${encodeURIComponent("ফ্রি ফাইল ডাউনলোড করতে জয়েন করুন!")}` }]
+          [{ text: '👥 বন্ধুদের রেফার করুন', url: `https://t.me/share/url?url=${encodeURIComponent(myRefLink)}&text=${encodeURIComponent("ফ্রিতে ফাইল ডাউনলোড করতে এখনই জয়েন করুন!")}` }]
         ]
       }
     });
