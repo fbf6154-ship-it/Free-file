@@ -117,7 +117,7 @@ app.post('/api/send-file', async (req, res) => {
     // 3. Short Success Footer (Like Screenshot)
     await tgApi('sendMessage', {
       chat_id: userId,
-      text: `📦 *FILE READY*\n\n📄 *${fileTitle || 'File'}*\n⚡ Delivered by *Free File Bot*`,
+      text: `📦 *FILE READY*\n\n📄 *${fileTitle || 'File'}*\n⚡ Delivered by *@krz_fahim*`,
       parse_mode: 'Markdown'
     });
 
