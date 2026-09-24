@@ -1,6 +1,7 @@
 /**
  * Telegram File Store Bot Server
- * 100% Guaranteed Private Channel File Delivery Engine
+ * With Real-time Admin Purchase & Error Alerts
+ * Admin ID: 8468523960 (@Fahad_dev_bro)
  * Bot Token: 8914672895:AAEAKLnsTMhfwjTUeRXGNOo_JDcARdXOtk0
  */
 
@@ -9,6 +10,7 @@ const cors = require('cors');
 const https = require('https');
 
 const BOT_TOKEN = '8914672895:AAEAKLnsTMhfwjTUeRXGNOo_JDcARdXOtk0';
+const ADMIN_ID = '8468523960'; // Admin Alert Destination
 const REQUIRED_CHANNELS = ['@a54auraax', '@FHx_Technical'];
 const WEBAPP_URL = 'https://freefile.fahimfaysal.shop/index.html';
 const FIREBASE_DB_URL = 'https://freefile-a561a-default-rtdb.asia-southeast1.firebasedatabase.app';
@@ -20,10 +22,10 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.json({ status: 'Online', bot: 'File Delivery Ready', time: new Date() });
+  res.json({ status: 'Online', bot: 'Running with Admin Alert Engine', time: new Date() });
 });
 
-// Telegram Native REST Request
+// Telegram Native REST API Helper
 function tgApi(method, payload) {
   return new Promise((resolve) => {
     const data = JSON.stringify(payload);
@@ -51,11 +53,10 @@ function parseTelegramLink(url) {
   if (!url || typeof url !== 'string') return null;
   const cleanUrl = url.trim();
 
-  // Private Channel Format: https://t.me/c/3976610083/29
+  // Private Channel Link Format: https://t.me/c/3976610083/29
   const privateMatch = cleanUrl.match(/t\.me\/c\/(\d+)\/(\d+)/);
   if (privateMatch) {
     const rawId = privateMatch[1];
-    // Convert to proper Telegram -100 format
     const fullChatId = rawId.startsWith('100') ? `-${rawId}` : `-100${rawId}`;
     return {
       chatId: fullChatId,
@@ -63,7 +64,7 @@ function parseTelegramLink(url) {
     };
   }
 
-  // Public Channel Format: https://t.me/channel_name/45
+  // Public Channel Link Format: https://t.me/channel_name/45
   const publicMatch = cleanUrl.match(/t\.me\/([a-zA-Z0-9_]+)\/(\d+)/);
   if (publicMatch && publicMatch[1] !== 'c') {
     return {
@@ -75,18 +76,16 @@ function parseTelegramLink(url) {
   return null;
 }
 
-// 🚀 CLEAN MULTI-FILE DELIVERY SYSTEM (ZERO TEXT LINKS)
+// 🚀 LIVE FILE DELIVERY & ADMIN ALERT ENDPOINT
 app.post('/api/send-file', async (req, res) => {
   const { userId, fileTitle, postLink } = req.body;
-
-  console.log(`[Order Processing] Delivering to User: ${userId}`);
 
   if (!userId) return res.status(400).json({ success: false, error: 'User ID missing' });
 
   const links = (postLink || '').split(/[\n,\s]+/).map(l => l.trim()).filter(Boolean);
 
   try {
-    // 1. Initial Notice
+    // 1. Initial Notice to User
     await tgApi('sendMessage', {
       chat_id: userId,
       text: `⏳ *File Found!*\n\n⚡ আপনার File এখন পাঠানো হচ্ছে...`,
@@ -95,14 +94,14 @@ app.post('/api/send-file', async (req, res) => {
 
     await new Promise(r => setTimeout(r, 400));
 
-    // 2. Deliver all files via clean copy
+    let deliveryErrors = [];
+
+    // 2. Deliver Files to User
     for (let i = 0; i < links.length; i++) {
       const link = links[i];
       const parsed = parseTelegramLink(link);
 
       if (parsed) {
-        console.log(`Copying message ID: ${parsed.messageId} from Channel: ${parsed.chatId} to User: ${userId}`);
-        
         const copyRes = await tgApi('copyMessage', {
           chat_id: userId,
           from_chat_id: parsed.chatId,
@@ -110,16 +109,9 @@ app.post('/api/send-file', async (req, res) => {
         });
 
         if (!copyRes || !copyRes.ok) {
-          console.error(`[Copy Error] Telegram Response:`, copyRes);
-          // If copy fails due to channel restriction, send direct document link
-          await tgApi('sendMessage', {
-            chat_id: userId,
-            text: `⚠️ *File ${i + 1}:* ${link}\n_(চ্যানেলের রেস্ট্রিকশনের কারণে সরাসরি ফাইল কপি করা যায়নি, লিংকে ক্লিক করে ফাইলটি সংগ্রহ করুন)_`,
-            parse_mode: 'Markdown'
-          });
+          deliveryErrors.push(`Failed to copy from ${link} -> Error: ${copyRes ? copyRes.description : 'Unknown'}`);
         }
       } else {
-        // Direct Download Link
         await tgApi('sendMessage', {
           chat_id: userId,
           text: `🔗 *File ${i + 1}:* ${link}`,
@@ -130,16 +122,53 @@ app.post('/api/send-file', async (req, res) => {
       await new Promise(r => setTimeout(r, 400));
     }
 
-    // 3. Success Footer Notice
+    // 3. User Success Notice
     await tgApi('sendMessage', {
       chat_id: userId,
       text: `📦 *FILE READY*\n\n📄 *${fileTitle || 'File Package'}*\n⚡ Delivered by *Free File Bot*`,
       parse_mode: 'Markdown'
     });
 
+    // 4. 🔔 Send Purchase Alert to Admin (@Fahad_dev_bro)
+    const adminAlertText = `🛍️ *নতুন ফাইল আনলক নোটিফিকেশন!*\n\n` +
+      `👤 *ইউজার আইডি:* \`${userId}\`\n` +
+      `📂 *ফাইলের নাম:* ${fileTitle}\n` +
+      `📦 *মোট লিংক/ফাইল সংখ্যা:* ${links.length} টি\n` +
+      `⏰ *সময়:* ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' })}\n\n` +
+      `✅ ইউজারের ইনবক্সে ডেলিভারি সম্পন্ন হয়েছে।`;
+
+    await tgApi('sendMessage', {
+      chat_id: ADMIN_ID,
+      text: adminAlertText,
+      parse_mode: 'Markdown'
+    });
+
+    // 5. ⚠️ Send Error Alert to Admin (If any error occurred during copy)
+    if (deliveryErrors.length > 0) {
+      const adminErrorText = `🚨 *ডেলিভারি এরর নোটিফিকেশন!*\n\n` +
+        `👤 *ইউজার আইডি:* \`${userId}\`\n` +
+        `📂 *ফাইল:* ${fileTitle}\n\n` +
+        `⚠️ *সমস্যার বিবরণ:*\n${deliveryErrors.join('\n')}\n\n` +
+        `💡 *টিপস:* আপনার প্রাইভেট চ্যানেলে বট অ্যাডমিন আছে কিনা এবং "Restrict saving content" বন্ধ আছে কিনা চেক করুন।`;
+
+      await tgApi('sendMessage', {
+        chat_id: ADMIN_ID,
+        text: adminErrorText,
+        parse_mode: 'Markdown'
+      });
+    }
+
     return res.json({ success: true });
   } catch (err) {
-    console.error('Delivery Error:', err);
+    console.error('Delivery Error:', err.message);
+
+    // Send Critical Crash Alert to Admin
+    await tgApi('sendMessage', {
+      chat_id: ADMIN_ID,
+      text: `❌ *সিস্টেম এরর এলার্ট!*\n\nইউজার ID: \`${userId}\` এর ফাইল সেন্ড করতে সমস্যা হয়েছে।\nError: \`${err.message}\``,
+      parse_mode: 'Markdown'
+    });
+
     return res.status(500).json({ success: false, error: err.message });
   }
 });
