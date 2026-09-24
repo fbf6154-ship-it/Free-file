@@ -1,6 +1,6 @@
 /**
  * Telegram File Store Bot Server
- * Auto-Parse Telegram Message Links (Zero Forward Tags)
+ * Multi-File Delivery Engine (Supports Multiple Links in One Post)
  * Bot Token: 8914672895:AAEAKLnsTMhfwjTUeRXGNOo_JDcARdXOtk0
  */
 
@@ -18,23 +18,21 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.json({ status: 'Online', bot: 'Running', time: new Date() });
+  res.json({ status: 'Online', bot: 'Running Multi-Delivery Engine', time: new Date() });
 });
 
-// Helper Function: Parse Any Telegram Post Link (Private /c/ or Public)
+// Helper: Parse Telegram Link
 function parseTelegramLink(url) {
-  if (!url || !url.includes('t.me/')) return null;
+  if (!url || typeof url !== 'string' || !url.includes('t.me/')) return null;
   
-  // 1. Private Channel Format: https://t.me/c/2145678901/45
   const privateMatch = url.match(/t\.me\/c\/(\d+)\/(\d+)/);
   if (privateMatch) {
     return {
-      chatId: '-100' + privateMatch[1], // Telegram private channel ID prefix
+      chatId: '-100' + privateMatch[1],
       messageId: parseInt(privateMatch[2])
     };
   }
 
-  // 2. Public Channel Format: https://t.me/channel_name/45
   const publicMatch = url.match(/t\.me\/([a-zA-Z0-9_]+)\/(\d+)/);
   if (publicMatch && publicMatch[1] !== 'c') {
     return {
@@ -46,48 +44,56 @@ function parseTelegramLink(url) {
   return null;
 }
 
-// API Endpoint to Deliver File cleanly
+// Multi-File Delivery Endpoint
 app.post('/api/send-file', async (req, res) => {
   const { userId, fileTitle, fileDesc, postLink } = req.body;
 
   if (!userId) return res.status(400).json({ success: false, error: 'User ID missing' });
 
-  const captionText = `🎉 *অভিনন্দন! আপনি সফলভাবে ফাইলটি সংগ্রহ করেছেন।*\n\n` +
-    `📂 *ফাইলের নাম:* ${fileTitle}\n` +
-    `📝 *বিবরণ:* ${fileDesc || 'প্রিমিয়াম সোর্স কোড ও ফাইল'}\n\n` +
-    `ধন্যবাদ আমাদের সাথে থাকার জন্য! ❤️`;
-
-  const parsed = parseTelegramLink(postLink);
+  // Split multiple links by comma or newline
+  const links = (postLink || '').split(/[\n,]+/).map(l => l.trim()).filter(Boolean);
 
   try {
-    if (parsed) {
-      // Clean Copy without any forward tag
-      await bot.copyMessage(userId, parsed.chatId, parsed.messageId, {
-        caption: captionText,
-        parse_mode: 'Markdown'
-      });
-    } else {
-      // Fallback: If regular drive/direct download link
-      await bot.sendMessage(userId, `${captionText}\n\n🔗 *ডাউনলোড লিংক:* ${postLink}`, {
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true
-      });
+    // 1. Send Initial Title & Info Header
+    const headerMsg = `🎉 *অভিনন্দন! আপনি সফলভাবে ফাইলগুলো আনলক করেছেন:*\n\n` +
+      `📂 *প্যাকেজ:* ${fileTitle}\n` +
+      `📝 *বিবরণ:* ${fileDesc || 'প্রিমিয়াম ফাইল ও সোর্স কোড'}\n` +
+      `📦 *মোট ফাইল সংখ্যা:* ${links.length} টি\n\n` +
+      `👇 নিচে ফাইলগুলো দেওয়া হলো:`;
+
+    await bot.sendMessage(userId, headerMsg, { parse_mode: 'Markdown' });
+
+    // 2. Loop through all links and copy/send each one cleanly
+    for (let i = 0; i < links.length; i++) {
+      const link = links[i];
+      const parsed = parseTelegramLink(link);
+
+      if (parsed) {
+        // Copy message from private channel without forward tag
+        await bot.copyMessage(userId, parsed.chatId, parsed.messageId).catch(err => {
+          console.error(`Error copying message ${link}:`, err.message);
+        });
+      } else {
+        // Direct Download Link
+        await bot.sendMessage(userId, `🔗 *ফাইল ${i + 1}:* ${link}`, {
+          parse_mode: 'Markdown',
+          disable_web_page_preview: true
+        }).catch(() => {});
+      }
+
+      // Small 300ms delay between files to maintain order
+      await new Promise(r => setTimeout(r, 300));
     }
 
-    return res.json({ success: true });
+    return res.json({ success: true, count: links.length });
   } catch (err) {
-    console.error('Delivery Error:', err.message);
-    try {
-      await bot.sendMessage(userId, `${captionText}\n\n🔗 *ডাউনলোড লিংক:* ${postLink}`, { parse_mode: 'Markdown' });
-      return res.json({ success: true });
-    } catch(e) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
+    console.error('Multi Delivery Error:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`Multi-Delivery Server is running on port ${PORT}`);
 });
 
 const bot = new TelegramBot(BOT_TOKEN, { 
