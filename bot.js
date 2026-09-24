@@ -1,6 +1,6 @@
 /**
  * Telegram File Store Bot Server
- * Multi-File Delivery Engine (Supports Multiple Links in One Post)
+ * 409 Conflict Proof & Auto-Clean Session Engine
  * Bot Token: 8914672895:AAEAKLnsTMhfwjTUeRXGNOo_JDcARdXOtk0
  */
 
@@ -18,10 +18,10 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.json({ status: 'Online', bot: 'Running Multi-Delivery Engine', time: new Date() });
+  res.json({ status: 'Online', bot: 'Running Smoothly', time: new Date() });
 });
 
-// Helper: Parse Telegram Link
+// Helper: Parse Any Telegram Message/Post Link
 function parseTelegramLink(url) {
   if (!url || typeof url !== 'string' || !url.includes('t.me/')) return null;
   
@@ -44,60 +44,70 @@ function parseTelegramLink(url) {
   return null;
 }
 
-// Multi-File Delivery Endpoint
+// 1. Telegram Bot Instance with Error Handling
+const bot = new TelegramBot(BOT_TOKEN, { polling: false });
+
+// Clean Old Sessions & Start Fresh Polling (Fixes 409 Conflict)
+async function startBot() {
+  try {
+    await bot.deleteWebhook({ drop_pending_updates: true });
+    bot.startPolling({ interval: 300, autoStart: true, params: { timeout: 10 } });
+    console.log('✅ Bot Polling Started Successfully without Conflict.');
+  } catch (err) {
+    console.error('Webhook reset error:', err.message);
+    bot.startPolling();
+  }
+}
+startBot();
+
+// Multi-File Delivery API
 app.post('/api/send-file', async (req, res) => {
   const { userId, fileTitle, fileDesc, postLink } = req.body;
 
   if (!userId) return res.status(400).json({ success: false, error: 'User ID missing' });
 
-  // Split multiple links by comma or newline
   const links = (postLink || '').split(/[\n,]+/).map(l => l.trim()).filter(Boolean);
 
   try {
-    // 1. Send Initial Title & Info Header
-    const headerMsg = `🎉 *অভিনন্দন! আপনি সফলভাবে ফাইলগুলো আনলক করেছেন:*\n\n` +
+    // 1. Send Header Message
+    const headerMsg = `🎉 *অভিনন্দন! আপনি ফাইলটি সফলভাবে আনলক করেছেন:*\n\n` +
       `📂 *প্যাকেজ:* ${fileTitle}\n` +
       `📝 *বিবরণ:* ${fileDesc || 'প্রিমিয়াম ফাইল ও সোর্স কোড'}\n` +
-      `📦 *মোট ফাইল সংখ্যা:* ${links.length} টি\n\n` +
-      `👇 নিচে ফাইলগুলো দেওয়া হলো:`;
+      `📦 *ফাইল সংখ্যা:* ${links.length} টি\n\n` +
+      `👇 নিচে আপনার ফাইলসমূহ দেওয়া হলো:`;
 
     await bot.sendMessage(userId, headerMsg, { parse_mode: 'Markdown' });
 
-    // 2. Loop through all links and copy/send each one cleanly
+    // 2. Deliver all files one by one without forward tags
     for (let i = 0; i < links.length; i++) {
       const link = links[i];
       const parsed = parseTelegramLink(link);
 
       if (parsed) {
-        // Copy message from private channel without forward tag
-        await bot.copyMessage(userId, parsed.chatId, parsed.messageId).catch(err => {
-          console.error(`Error copying message ${link}:`, err.message);
+        await bot.copyMessage(userId, parsed.chatId, parsed.messageId).catch(async (e) => {
+          console.error(`Copy error on link ${link}:`, e.message);
+          // Fallback to link if channel permission missing
+          await bot.sendMessage(userId, `🔗 *ফাইল ${i + 1}:* ${link}`);
         });
       } else {
-        // Direct Download Link
         await bot.sendMessage(userId, `🔗 *ফাইল ${i + 1}:* ${link}`, {
           parse_mode: 'Markdown',
           disable_web_page_preview: true
         }).catch(() => {});
       }
 
-      // Small 300ms delay between files to maintain order
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 400));
     }
 
-    return res.json({ success: true, count: links.length });
+    return res.json({ success: true });
   } catch (err) {
-    console.error('Multi Delivery Error:', err.message);
+    console.error('Delivery Error:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Multi-Delivery Server is running on port ${PORT}`);
-});
-
-const bot = new TelegramBot(BOT_TOKEN, { 
-  polling: { interval: 300, autoStart: true, params: { timeout: 10 } }
+  console.log(`Server running on port ${PORT}`);
 });
 
 function fbGet(path) {
