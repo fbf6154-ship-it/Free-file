@@ -1,6 +1,6 @@
 /**
  * Telegram File Store Bot Server
- * 100% Guaranteed Delivery with Full CORS Support
+ * Clean & Short Delivery Format (Matching Screenshot UI)
  * Bot Token: 8914672895:AAEAKLnsTMhfwjTUeRXGNOo_JDcARdXOtk0
  */
 
@@ -14,18 +14,16 @@ const WEBAPP_URL = 'https://freefile.fahimfaysal.shop/index.html';
 const FIREBASE_DB_URL = 'https://freefile-a561a-default-rtdb.asia-southeast1.firebasedatabase.app';
 
 const app = express();
-
-// Full CORS enabled so WebApp can trigger file delivery from anywhere
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.json({ status: 'Online', bot: 'Delivery Engine Active', time: new Date() });
+  res.json({ status: 'Online', bot: 'Running Short-Format Delivery', time: new Date() });
 });
 
-// Telegram REST API Request Helper
+// Telegram Native REST API Helper
 function tgApi(method, payload) {
   return new Promise((resolve) => {
     const data = JSON.stringify(payload);
@@ -48,7 +46,7 @@ function tgApi(method, payload) {
   });
 }
 
-// Helper: Parse Telegram Post Links
+// Parse Telegram Link
 function parseTelegramLink(url) {
   if (!url || typeof url !== 'string' || !url.includes('t.me/')) return null;
   const privateMatch = url.match(/t\.me\/c\/(\d+)\/(\d+)/);
@@ -68,58 +66,60 @@ function parseTelegramLink(url) {
   return null;
 }
 
-// 🚀 LIVE DELIVERY ENDPOINT: Copies files directly to user's bot chat
+// 🚀 CLEAN & SHORT DELIVERY (MATCHING SCREENSHOT)
 app.post('/api/send-file', async (req, res) => {
-  const { userId, fileTitle, fileDesc, postLink } = req.body;
-
-  console.log(`[Order Received] Delivering to User: ${userId}, Title: ${fileTitle}`);
+  const { userId, fileTitle, postLink } = req.body;
 
   if (!userId) return res.status(400).json({ success: false, error: 'User ID missing' });
 
   const links = (postLink || '').split(/[\n,]+/).map(l => l.trim()).filter(Boolean);
 
-  const captionText = `📂 *${fileTitle}*\n\n` +
-    `📝 *বিবরণ:* ${fileDesc || 'প্রিমিয়াম সোর্স কোড ও ফাইল'}\n\n` +
-    `ধন্যবাদ আমাদের সাথে থাকার জন্য! ❤️`;
-
   try {
+    // 1. Initial Short Notice (Like Screenshot)
+    await tgApi('sendMessage', {
+      chat_id: userId,
+      text: `⏳ *File Found!*\n\n⚡ আপনার File এখন পাঠানো হচ্ছে...`,
+      parse_mode: 'Markdown'
+    });
+
+    await new Promise(r => setTimeout(r, 400));
+
+    // 2. Deliver all files without forward tags
     for (let i = 0; i < links.length; i++) {
       const link = links[i];
       const parsed = parseTelegramLink(link);
 
       if (parsed) {
-        // 1. Clean copy without forward tags from Private Channel
-        const copyResult = await tgApi('copyMessage', {
+        const copyRes = await tgApi('copyMessage', {
           chat_id: userId,
           from_chat_id: parsed.chatId,
-          message_id: parsed.messageId,
-          caption: captionText,
-          parse_mode: 'Markdown'
+          message_id: parsed.messageId
         });
 
-        console.log(`Copy Result for ${link}:`, copyResult ? copyResult.ok : false);
-
-        if (!copyResult || !copyResult.ok) {
-          // If copy fails, send as direct link message
+        if (!copyRes || !copyRes.ok) {
           await tgApi('sendMessage', {
             chat_id: userId,
-            text: `${captionText}\n\n🔗 *ডাউনলোড লিংক:* ${link}`,
-            parse_mode: 'Markdown',
+            text: `📄 *File ${i + 1}:* ${link}`,
             disable_web_page_preview: true
           });
         }
       } else {
-        // 2. Direct Link
         await tgApi('sendMessage', {
           chat_id: userId,
-          text: `${captionText}\n\n🔗 *ডাউনলোড লিংক:* ${link}`,
-          parse_mode: 'Markdown',
+          text: `📄 *File ${i + 1}:* ${link}`,
           disable_web_page_preview: true
         });
       }
 
       await new Promise(r => setTimeout(r, 400));
     }
+
+    // 3. Short Success Footer (Like Screenshot)
+    await tgApi('sendMessage', {
+      chat_id: userId,
+      text: `📦 *FILE READY*\n\n📄 *${fileTitle || 'File'}*\n⚡ Delivered by *Free File Bot*`,
+      parse_mode: 'Markdown'
+    });
 
     return res.json({ success: true, count: links.length });
   } catch (err) {
@@ -129,7 +129,7 @@ app.post('/api/send-file', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server is running with CORS on port ${PORT}`);
+  console.log(`Server is active on port ${PORT}`);
 });
 
 // Firebase Database Helpers
@@ -191,7 +191,7 @@ async function pollUpdates() {
   setTimeout(pollUpdates, 400);
 }
 
-// Start Clean Polling
+// Start Native Polling
 tgApi('deleteWebhook', { drop_pending_updates: true }).then(() => {
   console.log('🚀 Native Polling Engine Started Cleanly.');
   pollUpdates();
@@ -258,7 +258,7 @@ async function handleUpdate(update) {
   }
 }
 
-// Complete Verification & Referral Logic
+// Complete Verification & +1 Point Reward
 async function completeVerification(chatId, user, referrerId) {
   const existingUser = await fbGet(`users/${user.id}`);
 
