@@ -1,10 +1,8 @@
 /**
- * Telegram File Store Bot Server
- * 409 Conflict Proof & Auto-Clean Session Engine
- * Bot Token: 8914672895:AAEAKLnsTMhfwjTUeRXGNOo_JDcARdXOtk0
+ * Telegram File Store Bot Server (Zero Dependency REST API Engine)
+ * Token: 8914672895:AAEAKLnsTMhfwjTUeRXGNOo_JDcARdXOtk0
  */
 
-const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const https = require('https');
 
@@ -18,13 +16,35 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.json({ status: 'Online', bot: 'Running Smoothly', time: new Date() });
+  res.json({ status: 'Online', bot: 'Running Ultra Stable', time: new Date() });
 });
 
-// Helper: Parse Any Telegram Message/Post Link
+// Native Telegram API Request Helper
+function tgApi(method, payload) {
+  return new Promise((resolve) => {
+    const data = JSON.stringify(payload);
+    const req = https.request(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+    }, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        try { resolve(JSON.parse(body)); } catch (e) { resolve(null); }
+      });
+    });
+    req.on('error', (e) => {
+      console.error(`TG API Error (${method}):`, e.message);
+      resolve(null);
+    });
+    req.write(data);
+    req.end();
+  });
+}
+
+// Parse Telegram Links (Private /c/ or Public)
 function parseTelegramLink(url) {
   if (!url || typeof url !== 'string' || !url.includes('t.me/')) return null;
-  
   const privateMatch = url.match(/t\.me\/c\/(\d+)\/(\d+)/);
   if (privateMatch) {
     return {
@@ -32,7 +52,6 @@ function parseTelegramLink(url) {
       messageId: parseInt(privateMatch[2])
     };
   }
-
   const publicMatch = url.match(/t\.me\/([a-zA-Z0-9_]+)\/(\d+)/);
   if (publicMatch && publicMatch[1] !== 'c') {
     return {
@@ -40,66 +59,59 @@ function parseTelegramLink(url) {
       messageId: parseInt(publicMatch[2])
     };
   }
-
   return null;
 }
 
-// 1. Telegram Bot Instance with Error Handling
-const bot = new TelegramBot(BOT_TOKEN, { polling: false });
-
-// Clean Old Sessions & Start Fresh Polling (Fixes 409 Conflict)
-async function startBot() {
-  try {
-    await bot.deleteWebhook({ drop_pending_updates: true });
-    bot.startPolling({ interval: 300, autoStart: true, params: { timeout: 10 } });
-    console.log('✅ Bot Polling Started Successfully without Conflict.');
-  } catch (err) {
-    console.error('Webhook reset error:', err.message);
-    bot.startPolling();
-  }
-}
-startBot();
-
-// Multi-File Delivery API
+// Multi-File Direct Delivery API Endpoint (Called from WebApp)
 app.post('/api/send-file', async (req, res) => {
   const { userId, fileTitle, fileDesc, postLink } = req.body;
 
-  if (!userId) return res.status(400).json({ success: false, error: 'User ID missing' });
+  if (!userId) return res.status(400).json({ success: false, error: 'User ID is missing' });
 
   const links = (postLink || '').split(/[\n,]+/).map(l => l.trim()).filter(Boolean);
 
+  const captionText = `📂 *${fileTitle}*\n\n` +
+    `📝 *বিবরণ:* ${fileDesc || 'প্রিমিয়াম ফাইল ও স্ক্রিপ্ট'}\n\n` +
+    `ধন্যবাদ আমাদের সাথে থাকার জন্য! ❤️`;
+
   try {
-    // 1. Send Header Message
-    const headerMsg = `🎉 *অভিনন্দন! আপনি ফাইলটি সফলভাবে আনলক করেছেন:*\n\n` +
-      `📂 *প্যাকেজ:* ${fileTitle}\n` +
-      `📝 *বিবরণ:* ${fileDesc || 'প্রিমিয়াম ফাইল ও সোর্স কোড'}\n` +
-      `📦 *ফাইল সংখ্যা:* ${links.length} টি\n\n` +
-      `👇 নিচে আপনার ফাইলসমূহ দেওয়া হলো:`;
-
-    await bot.sendMessage(userId, headerMsg, { parse_mode: 'Markdown' });
-
-    // 2. Deliver all files one by one without forward tags
     for (let i = 0; i < links.length; i++) {
       const link = links[i];
       const parsed = parseTelegramLink(link);
 
       if (parsed) {
-        await bot.copyMessage(userId, parsed.chatId, parsed.messageId).catch(async (e) => {
-          console.error(`Copy error on link ${link}:`, e.message);
-          // Fallback to link if channel permission missing
-          await bot.sendMessage(userId, `🔗 *ফাইল ${i + 1}:* ${link}`);
+        // Copy original file with custom caption and NO forward tag
+        const result = await tgApi('copyMessage', {
+          chat_id: userId,
+          from_chat_id: parsed.chatId,
+          message_id: parsed.messageId,
+          caption: captionText,
+          parse_mode: 'Markdown'
         });
+
+        if (!result || !result.ok) {
+          // If bot lacks permission in channel, send direct link
+          await tgApi('sendMessage', {
+            chat_id: userId,
+            text: `${captionText}\n\n🔗 *ডাউনলোড লিংক:* ${link}`,
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true
+          });
+        }
       } else {
-        await bot.sendMessage(userId, `🔗 *ফাইল ${i + 1}:* ${link}`, {
+        // Direct Download Link
+        await tgApi('sendMessage', {
+          chat_id: userId,
+          text: `${captionText}\n\n🔗 *ডাউনলোড লিংক:* ${link}`,
           parse_mode: 'Markdown',
           disable_web_page_preview: true
-        }).catch(() => {});
+        });
       }
 
       await new Promise(r => setTimeout(r, 400));
     }
 
-    return res.json({ success: true });
+    return res.json({ success: true, count: links.length });
   } catch (err) {
     console.error('Delivery Error:', err.message);
     return res.status(500).json({ success: false, error: err.message });
@@ -107,9 +119,10 @@ app.post('/api/send-file', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server listening on port ${PORT}`);
 });
 
+// Firebase Database Helpers
 function fbGet(path) {
   return new Promise((resolve) => {
     https.get(`${FIREBASE_DB_URL}/${path}.json`, (res) => {
@@ -135,34 +148,67 @@ function fbUpdate(path, payload) {
   });
 }
 
+// Channel Subscription Check
 async function isSubscribed(userId) {
   for (const ch of REQUIRED_CHANNELS) {
     try {
-      const res = await bot.getChatMember(ch, userId);
-      if (!['creator', 'administrator', 'member'].includes(res.status)) return false;
-    } catch (e) { return false; }
+      const res = await tgApi('getChatMember', { chat_id: ch, user_id: userId });
+      if (!res || !res.ok || !['creator', 'administrator', 'member'].includes(res.result.status)) {
+        return false;
+      }
+    } catch (e) {
+      return false;
+    }
   }
   return true;
 }
 
-bot.on('message', async (msg) => {
-  if (!msg.text) return;
-  const text = msg.text.trim();
-  const chatId = msg.chat.id;
-  const user = msg.from;
+// Polling Engine with Native REST API (No 409 Conflict Crashes)
+let updateOffset = 0;
 
-  if (text.startsWith('/start')) {
-    let referrerId = 'none';
-    const parts = text.split(' ');
-    if (parts.length > 1 && parts[1].trim().startsWith('ref_')) {
-      referrerId = parts[1].trim().replace('ref_', '');
+async function pollUpdates() {
+  try {
+    const res = await tgApi('getUpdates', { offset: updateOffset, timeout: 10 });
+    if (res && res.ok && Array.isArray(res.result)) {
+      for (const update of res.result) {
+        updateOffset = update.update_id + 1;
+        handleUpdate(update);
+      }
     }
-    if (String(referrerId) === String(user.id)) referrerId = 'none';
+  } catch (err) {
+    console.error('Polling Error:', err.message);
+  }
+  setTimeout(pollUpdates, 400);
+}
 
-    const subscribed = await isSubscribed(user.id);
-    if (!subscribed) {
-      return bot.sendMessage(chatId, 
-        `👋 *হ্যালো ${user.first_name || 'ইউজার'}!*\n\nআমাদের বট ব্যবহার করতে নিচের চ্যানেল দুটিতে জয়েন করুন:\n\n1️⃣ [Channel 1](https://t.me/a54auraax)\n2️⃣ [Channel 2](https://t.me/FHx_Technical)\n\nজয়েন করে নিচে *✅ ভেরিফাই করুন* বাটনে চাপ দিন।`, {
+// Start Native Polling
+tgApi('deleteWebhook', { drop_pending_updates: true }).then(() => {
+  console.log('🚀 Native Polling Engine Started Cleanly.');
+  pollUpdates();
+});
+
+// Handle Bot Events
+async function handleUpdate(update) {
+  // 1. Text Messages (/start)
+  if (update.message && update.message.text) {
+    const msg = update.message;
+    const text = msg.text.trim();
+    const chatId = msg.chat.id;
+    const user = msg.from;
+
+    if (text.startsWith('/start')) {
+      let referrerId = 'none';
+      const parts = text.split(' ');
+      if (parts.length > 1 && parts[1].trim().startsWith('ref_')) {
+        referrerId = parts[1].trim().replace('ref_', '');
+      }
+      if (String(referrerId) === String(user.id)) referrerId = 'none';
+
+      const subscribed = await isSubscribed(user.id);
+      if (!subscribed) {
+        return tgApi('sendMessage', {
+          chat_id: chatId,
+          text: `👋 *হ্যালো ${user.first_name || 'ইউজার'}!*\n\nআমাদের বট ব্যবহার করতে নিচের চ্যানেল দুটিতে জয়েন করুন:\n\n1️⃣ [Channel 1](https://t.me/a54auraax)\n2️⃣ [Channel 2](https://t.me/FHx_Technical)\n\nজয়েন করে নিচে *✅ ভেরিফাই করুন* বাটনে চাপ দিন।`,
           parse_mode: 'Markdown',
           disable_web_page_preview: true,
           reply_markup: {
@@ -172,46 +218,47 @@ bot.on('message', async (msg) => {
               [{ text: '✅ ভেরিফাই করুন', callback_data: `verify_${referrerId}` }]
             ]
           }
-        }
-      );
+        });
+      }
+
+      await completeVerification(chatId, user, referrerId === 'none' ? null : referrerId);
     }
-    await completeVerification(chatId, user, referrerId === 'none' ? null : referrerId);
   }
-});
 
-bot.on('callback_query', async (query) => {
-  const chatId = query.message.chat.id;
-  const user = query.from;
-  const data = query.data;
+  // 2. Callback Queries (Verify Button)
+  if (update.callback_query) {
+    const query = update.callback_query;
+    const chatId = query.message.chat.id;
+    const user = query.from;
+    const data = query.data;
 
-  if (data.startsWith('verify_')) {
-    const referrerId = data.replace('verify_', '').trim();
-    const subscribed = await isSubscribed(user.id);
-    if (!subscribed) {
-      return bot.answerCallbackQuery(query.id, { text: '❌ আগে চ্যানেল দুটিতে জয়েন করুন!', show_alert: true });
+    if (data.startsWith('verify_')) {
+      const referrerId = data.replace('verify_', '').trim();
+      const subscribed = await isSubscribed(user.id);
+
+      if (!subscribed) {
+        return tgApi('answerCallbackQuery', {
+          callback_query_id: query.id,
+          text: '❌ আগে চ্যানেল দুটিতে জয়েন করুন!',
+          show_alert: true
+        });
+      }
+
+      tgApi('deleteMessage', { chat_id: chatId, message_id: query.message.message_id });
+      await completeVerification(chatId, user, referrerId === 'none' ? null : referrerId);
     }
-    try { await bot.deleteMessage(chatId, query.message.message_id); } catch (e) {}
-    await completeVerification(chatId, user, referrerId === 'none' ? null : referrerId);
   }
-});
+}
 
+// Complete Verification & +1 Point Reward
 async function completeVerification(chatId, user, referrerId) {
   const existingUser = await fbGet(`users/${user.id}`);
-  let photoUrl = '';
-  try {
-    const photos = await bot.getUserProfilePhotos(user.id, { limit: 1 });
-    if (photos.total_count > 0) {
-      const file = await bot.getFile(photos.photos[0][0].file_id);
-      photoUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
-    }
-  } catch(e){}
 
   if (!existingUser) {
     const newUser = {
       id: user.id,
       name: [user.first_name, user.last_name].filter(Boolean).join(' ') || 'User',
       username: user.username || 'No Username',
-      photo: photoUrl,
       coins: 0,
       referralCount: 0,
       referredBy: referrerId || null,
@@ -228,14 +275,20 @@ async function completeVerification(chatId, user, referrerId) {
           coins: (parseInt(inviter.coins) || 0) + 1,
           referralCount: (parseInt(inviter.referralCount) || 0) + 1
         });
-        bot.sendMessage(referrerId, `🎉 *অভিনন্দন!* আপনার রেফারে একজন জয়েন করায় *+1 পয়েন্ট* যোগ হয়েছে!`, { parse_mode: 'Markdown' }).catch(()=>{});
+        tgApi('sendMessage', {
+          chat_id: referrerId,
+          text: `🎉 *অভিনন্দন!* আপনার রেফারেল লিংকে একজন জয়েন করায় *+1 পয়েন্ট* যোগ হয়েছে!`,
+          parse_mode: 'Markdown'
+        });
       }
     }
     await fbUpdate(`users/${user.id}`, newUser);
   }
 
-  const me = await bot.getMe();
-  const myRefLink = `https://t.me/${me.username}?start=ref_${user.id}`;
+  const botInfo = await tgApi('getMe', {});
+  const botUsername = (botInfo && botInfo.result) ? botInfo.result.username : 'frxfreebot';
+  const myRefLink = `https://t.me/${botUsername}?start=ref_${user.id}`;
+
   const welcomeText = `🎉 *অভিনন্দন ${user.first_name || ''}! আপনার অ্যাকাউন্ট ভেরিফাইড।*\n\n` +
     `💡 *পয়েন্ট নিয়ম:*\n` +
     `• ১টি অ্যাড = ১ পয়েন্ট\n` +
@@ -243,7 +296,9 @@ async function completeVerification(chatId, user, referrerId) {
     `🔗 *রেফারেল লিংক:*\n\`${myRefLink}\`\n\n` +
     `নিচের বাটনে ক্লিক করে অ্যাপ ওপেন করুন 👇`;
 
-  bot.sendMessage(chatId, welcomeText, {
+  tgApi('sendMessage', {
+    chat_id: chatId,
+    text: welcomeText,
     parse_mode: 'Markdown',
     reply_markup: {
       inline_keyboard: [
