@@ -1,8 +1,8 @@
 /**
  * Telegram File Store Bot Server
- * With Real-time Admin Purchase & Error Alerts
- * Admin ID: 8468523960 (@Fahad_dev_bro)
- * Bot Token: 8914672895:AAEAKLnsTMhfwjTUeRXGNOo_JDcARdXOtk0
+ * Direct Server-Side Delivery Engine
+ * Bot Token: 8914672895:AAGv2xtOGy0T_ZbMwkBCMIWjmyp3PSDgvZE
+ * Admin ID: 8468523960
  */
 
 const express = require('express');
@@ -10,7 +10,7 @@ const cors = require('cors');
 const https = require('https');
 
 const BOT_TOKEN = '8914672895:AAGv2xtOGy0T_ZbMwkBCMIWjmyp3PSDgvZE';
-const ADMIN_ID = '8468523960'; // Admin Alert Destination
+const ADMIN_ID = '8468523960';
 const REQUIRED_CHANNELS = ['@a54auraax', '@FHx_Technical'];
 const WEBAPP_URL = 'https://freefile.fahimfaysal.shop/index.html';
 const FIREBASE_DB_URL = 'https://freefile-a561a-default-rtdb.asia-southeast1.firebasedatabase.app';
@@ -22,7 +22,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.json({ status: 'Online', bot: 'Running with Admin Alert Engine', time: new Date() });
+  res.json({ status: 'Online', service: 'Telegram File Delivery Server', time: new Date() });
 });
 
 // Telegram Native REST API Helper
@@ -31,7 +31,10 @@ function tgApi(method, payload) {
     const data = JSON.stringify(payload);
     const req = https.request(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+      headers: { 
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      }
     }, (res) => {
       let body = '';
       res.on('data', chunk => body += chunk);
@@ -48,12 +51,12 @@ function tgApi(method, payload) {
   });
 }
 
-// 100% Accurate Telegram Post Link Parser
+// 100% Accurate Link Parser
 function parseTelegramLink(url) {
   if (!url || typeof url !== 'string') return null;
   const cleanUrl = url.trim();
 
-  // Private Channel Link Format: https://t.me/c/3976610083/29
+  // Private Channel Format: https://t.me/c/3976610083/29
   const privateMatch = cleanUrl.match(/t\.me\/c\/(\d+)\/(\d+)/);
   if (privateMatch) {
     const rawId = privateMatch[1];
@@ -64,7 +67,7 @@ function parseTelegramLink(url) {
     };
   }
 
-  // Public Channel Link Format: https://t.me/channel_name/45
+  // Public Channel Format: https://t.me/channel_name/45
   const publicMatch = cleanUrl.match(/t\.me\/([a-zA-Z0-9_]+)\/(\d+)/);
   if (publicMatch && publicMatch[1] !== 'c') {
     return {
@@ -76,27 +79,27 @@ function parseTelegramLink(url) {
   return null;
 }
 
-// 🚀 LIVE FILE DELIVERY & ADMIN ALERT ENDPOINT
+// 🚀 LIVE DELIVERY ENDPOINT (Called from index.html)
 app.post('/api/send-file', async (req, res) => {
-  const { userId, fileTitle, postLink } = req.body;
+  const { userId, fileTitle, fileDesc, postLink, userName } = req.body;
+
+  console.log(`[Order Processing] Delivering to User: ${userId} (${userName})`);
 
   if (!userId) return res.status(400).json({ success: false, error: 'User ID missing' });
 
   const links = (postLink || '').split(/[\n,\s]+/).map(l => l.trim()).filter(Boolean);
 
   try {
-    // 1. Initial Notice to User
+    // 1. Send Top Header Notice
     await tgApi('sendMessage', {
       chat_id: userId,
-      text: `⏳ *File Found!*\n\n⚡ আপনার File এখন পাঠানো হচ্ছে...`,
+      text: `📦 *Your File Ready!*\n\n⚡ আপনার ফাইল নিচে দেওয়া হলো:`,
       parse_mode: 'Markdown'
     });
 
-    await new Promise(r => setTimeout(r, 400));
+    await new Promise(r => setTimeout(r, 300));
 
-    let deliveryErrors = [];
-
-    // 2. Deliver Files to User
+    // 2. Deliver Files (Clean copy from Private Channel)
     for (let i = 0; i < links.length; i++) {
       const link = links[i];
       const parsed = parseTelegramLink(link);
@@ -109,7 +112,12 @@ app.post('/api/send-file', async (req, res) => {
         });
 
         if (!copyRes || !copyRes.ok) {
-          deliveryErrors.push(`Failed to copy from ${link} -> Error: ${copyRes ? copyRes.description : 'Unknown'}`);
+          console.error(`[Copy Error] for ${link}:`, copyRes ? copyRes.description : 'Failed');
+          await tgApi('sendMessage', {
+            chat_id: userId,
+            text: `🔗 *File ${i + 1}:* ${link}`,
+            disable_web_page_preview: true
+          });
         }
       } else {
         await tgApi('sendMessage', {
@@ -122,53 +130,23 @@ app.post('/api/send-file', async (req, res) => {
       await new Promise(r => setTimeout(r, 400));
     }
 
-    // 3. User Success Notice
+    // 3. Send Bottom Success Details
     await tgApi('sendMessage', {
       chat_id: userId,
-      text: `📦 *FILE READY*\n\n📄 *${fileTitle || 'File Package'}*\n⚡ Delivered by *@krz_fahim*`,
+      text: `✅ *ফাইল ডেলিভারি সম্পন্ন!*\n\n📂 *ফাইল:* ${fileTitle}\n📝 *বিবরণ:* ${fileDesc || 'প্রিমিয়াম সোর্স কোড ও ফাইল'}\n\nধন্যবাদ আমাদের সাথে থাকার জন্য! ❤️`,
       parse_mode: 'Markdown'
     });
 
-    // 4. 🔔 Send Purchase Alert to Admin (@Fahad_dev_bro)
-    const adminAlertText = `🛍️ *নতুন ফাইল আনলক নোটিফিকেশন!*\n\n` +
-      `👤 *ইউজার আইডি:* \`${userId}\`\n` +
-      `📂 *ফাইলের নাম:* ${fileTitle}\n` +
-      `📦 *মোট লিংক/ফাইল সংখ্যা:* ${links.length} টি\n` +
-      `⏰ *সময়:* ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' })}\n\n` +
-      `✅ ইউজারের ইনবক্সে ডেলিভারি সম্পন্ন হয়েছে।`;
-
+    // 4. Send Admin Alert (@Fahad_dev_bro)
     await tgApi('sendMessage', {
       chat_id: ADMIN_ID,
-      text: adminAlertText,
+      text: `🛍️ *নতুন পারচেজ নোটিফিকেশন!*\n\n👤 *ইউজার:* ${userName || 'User'} (\`${userId}\`)\n📂 *ফাইল:* ${fileTitle}\n⏰ *সময়:* ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' })}`,
       parse_mode: 'Markdown'
     });
-
-    // 5. ⚠️ Send Error Alert to Admin (If any error occurred during copy)
-    if (deliveryErrors.length > 0) {
-      const adminErrorText = `🚨 *ডেলিভারি এরর নোটিফিকেশন!*\n\n` +
-        `👤 *ইউজার আইডি:* \`${userId}\`\n` +
-        `📂 *ফাইল:* ${fileTitle}\n\n` +
-        `⚠️ *সমস্যার বিবরণ:*\n${deliveryErrors.join('\n')}\n\n` +
-        `💡 *টিপস:* আপনার প্রাইভেট চ্যানেলে বট অ্যাডমিন আছে কিনা এবং "Restrict saving content" বন্ধ আছে কিনা চেক করুন।`;
-
-      await tgApi('sendMessage', {
-        chat_id: ADMIN_ID,
-        text: adminErrorText,
-        parse_mode: 'Markdown'
-      });
-    }
 
     return res.json({ success: true });
   } catch (err) {
     console.error('Delivery Error:', err.message);
-
-    // Send Critical Crash Alert to Admin
-    await tgApi('sendMessage', {
-      chat_id: ADMIN_ID,
-      text: `❌ *সিস্টেম এরর এলার্ট!*\n\nইউজার ID: \`${userId}\` এর ফাইল সেন্ড করতে সমস্যা হয়েছে।\nError: \`${err.message}\``,
-      parse_mode: 'Markdown'
-    });
-
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -236,7 +214,7 @@ async function pollUpdates() {
   setTimeout(pollUpdates, 400);
 }
 
-// Clean Hook Reset & Start Polling
+// Start Clean Polling
 tgApi('deleteWebhook', { drop_pending_updates: true }).then(() => {
   console.log('🚀 Polling Started Cleanly.');
   pollUpdates();
