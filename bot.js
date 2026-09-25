@@ -9,7 +9,7 @@ const express = require('express');
 const cors = require('cors');
 const https = require('https');
 
-const BOT_TOKEN = '8914672895:AAEAKLnsTMhfwjTUeRXGNOo_JDcARdXOtk0';
+const BOT_TOKEN = '8914672895:AAGv2xtOGy0T_ZbMwkBCMIWjmyp3PSDgvZE';
 const ADMIN_ID = '8468523960'; // Admin Alert Destination
 const REQUIRED_CHANNELS = ['@a54auraax', '@FHx_Technical'];
 const WEBAPP_URL = 'https://freefile.fahimfaysal.shop/index.html';
