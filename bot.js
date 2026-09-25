@@ -2,7 +2,7 @@
  * Telegram File Store Bot Server
  * With Real-time Admin Purchase & Error Alerts
  * Admin ID: 8468523960 (@Fahad_dev_bro)
- * Bot Token: 8914672895:AAEAKLnsTMhfwjTUeRXGNOo_JDcARdXOtk0
+ * Bot Token: 8914672895:AAHQ4lZIT6BGkuX7fI6LoppakBuQGe9mCcM
  */
 
 const express = require('express');
